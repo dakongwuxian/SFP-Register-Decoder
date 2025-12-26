@@ -17,6 +17,10 @@
 可能存在潜在的错误，仅供参考，如果发现错误，请及时告知 xian.wu@ericsson.com 或 dakongwuxian@mail.com 。
 欢迎提出意见及建议~
 
+exe 文件的下载链接如下：
+
+https://github.com/dakongwuxian/SFP-Register-Decoder/releases
+
 This is an interpretation tool for the optical module register, written by xian wu, and its name is "SFP-Reg-Decoder". 
 
 Brief instructions:
@@ -35,3 +39,7 @@ Note:
 There may be potential errors. This is for reference only. If any errors are found, please notify xian.wu@ericsson.com or dakongwuxian@mail.com promptly.
 
 We welcome your comments and suggestions!
+
+exe file could be download here:
+
+https://github.com/dakongwuxian/SFP-Register-Decoder/releases
