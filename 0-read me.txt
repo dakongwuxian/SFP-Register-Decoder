@@ -22,11 +22,19 @@ SFP-Reg-Decoder 用户手册 - last edit on 2025.12.29 by xian wu
 可能存在潜在的错误，仅供参考，如果发现错误，请及时告知 xian.wu@ericsson.com 或 dakongwuxian@mail.com 。
 欢迎提出意见及建议~
 
-This is an interpretation tool for the optical module register, written by xian wu, and its name is "SFP-Reg-Decoder". 
+SFP-Reg-Decoder User Manual
+
+Last edited on December 29, 2025, by Xian Wu
+
+SFP-Reg-Decoder is a tool designed for interpreting optical transceiver register data.
+
+This software was developed independently by Xian Wu. It is a GUI application provided as a single .exe file compatible with Windows systems (repackaging the source code is required for other operating systems). The development environment utilized Python 3.10 and VS Code, with assistance from ChatGPT and Amazon Q.
+
+This is open-source software. Please obtain permission from the original author for any commercial use. For inquiries, please contact dakongwuxian@gmail.com or xian.wu@ericsson.com.
 
 Brief instructions:
 
-1. Paste the contents of SFP A0h and A2h registers into the corresponding windows on the left side. Click the "Parse Register" button and you will see the parsing result.
+1. "Paste the register contents of SFP A0h and A2h into the corresponding windows on the left. You can paste everything into the A0h window. Supported formats include individual hex bytes (e.g., AA FF...), continuous 8-byte hex strings (e.g., AAAAAAAA FFFFFFFF...), or direct register dumps from Ericsson radios. Click the 'Parse Register' button to view the analysis results."
 2. The content to be pasted must consist only of hexadecimal numbers and letters. Do not include "0xAA" (0x), just "AA". It can contain spaces and line breaks. A0h must be 128 bytes or 256 bytes, and A2h must be 256 bytes.
 3. After parsing, you can click the register value in the left window with the mouse, or click any content in the middle output window. A detailed explanation of the corresponding byte will appear on the right side, and the corresponding positions on the left and middle sides will be highlighted.
 4. There is an 8-bit display window on the top of the right window. When you double-click an 8-bit binary number in the large window on the right, that binary number will be highlighted, and the 8-bit window above will correspond to that binary number.
@@ -40,4 +48,3 @@ Note:
 There may be potential errors. This is for reference only. If any errors are found, please notify xian.wu@ericsson.com or dakongwuxian@mail.com promptly.
 
 We welcome your comments and suggestions!
-
