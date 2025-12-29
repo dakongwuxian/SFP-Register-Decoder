@@ -35,53 +35,73 @@ def load_explanations_from_file(filename="A0h_bits_explanation.txt", a2h_filenam
     Loads the explanations dictionaries from two separate text files.
     Each file is expected to contain a Python dictionary literal.
     """
-    global explanations
-    global a2h_explanations
-
-    # Load A0h explanations
-    filepath_a0h =resource_path(filename)
-    try:
-        with open(filepath_a0h, 'r', encoding='utf-8') as f:
-            content = f.read()
-            explanations = eval(content)
-            print(f"Successfully loaded A0h explanations from {filepath_a0h}")
-    except FileNotFoundError:
-        messagebox.showerror("Error", f"Explanation file '{filename}' not found.\nPlease ensure '{filename}' is in the same directory as the script.")
-        print(f"Error: Explanation file '{filename}' not found at {filepath_a0h}")
-        explanations = {0: ["No A0h explanations loaded. Please check A0h_bits_explanation.txt"]}
-    except SyntaxError as e:
-        messagebox.showerror("Error", f"Error parsing '{filename}': Invalid syntax. Please check file format. Error: {e}")
-        print(f"Error: Syntax error in {filename}: {e}")
-        explanations = {0: ["Error parsing A0h explanation file. Check syntax."]}
-    except Exception as e:
-        messagebox.showerror("Error", f"An unexpected error occurred while loading '{filename}': {e}")
-        print(f"Error: Unexpected error loading {filename}: {e}")
-        explanations = {0: ["An unexpected error occurred while loading A0h explanations."]}
-
-    # Load A2h explanations
-    filepath_a2h = resource_path(a2h_filename)
-    try:
-        with open(filepath_a2h, 'r', encoding='utf-8') as f:
-            content = f.read()
-            a2h_explanations = eval(content)
-            print(f"Successfully loaded A2h explanations from {filepath_a2h}")
-    except FileNotFoundError:
-        messagebox.showerror("Error", f"Explanation file '{a2h_filename}' not found.\nPlease ensure '{a2h_filename}' is in the same directory as the script.")
-        print(f"Error: Explanation file '{a2h_filename}' not found at {filepath_a2h}")
-        a2h_explanations = {0: ["No A2h explanations loaded. Please check A2h_bits_explanation.txt"]}
-    except SyntaxError as e:
-        messagebox.showerror("Error", f"Error parsing '{a2h_filename}': Invalid syntax. Please check file format. Error: {e}")
-        print(f"Error: Syntax error in {a2h_filename}: {e}")
-        a2h_explanations = {0: ["Error parsing A2h explanation file. Check syntax."]}
-    except Exception as e:
-        messagebox.showerror("Error", f"An unexpected error occurred while loading '{a2h_filename}': {e}")
-        print(f"Error: Unexpected error loading {a2h_filename}: {e}")
-        a2h_explanations = {0: ["An unexpected error occurred while loading A2h explanations."]}
+    global explanations, a2h_explanations
+    
+    def load_single_file(filepath, file_type, default_key=0):
+        """Helper function to load a single explanation file"""
+        try:
+            with open(filepath, 'r', encoding='utf-8') as f:
+                content = f.read()
+                return eval(content)  # Consider using json.loads() or ast.literal_eval() for security
+        except FileNotFoundError:
+            messagebox.showerror("Error", f"Explanation file '{os.path.basename(filepath)}' not found.")
+            return {default_key: [f"No {file_type} explanations loaded. Please check {os.path.basename(filepath)}"]}
+        except (SyntaxError, ValueError) as e:
+            messagebox.showerror("Error", f"Error parsing '{os.path.basename(filepath)}': {e}")
+            return {default_key: [f"Error parsing {file_type} explanation file. Check syntax."]}
+        except Exception as e:
+            messagebox.showerror("Error", f"Unexpected error loading '{os.path.basename(filepath)}': {e}")
+            return {default_key: [f"Unexpected error loading {file_type} explanations."]}
+    
+    # Load both explanation files
+    explanations = load_single_file(resource_path(filename), "A0h")
+    a2h_explanations = load_single_file(resource_path(a2h_filename), "A2h")
 
 
+
+def format_hex_bytes(parsed_bytes):
+    """将解析出的字节重新格式化为标准显示格式"""
+    formatted_parts = []
+    for i, byte_val in enumerate(parsed_bytes):
+        formatted_parts.append(f"{byte_val:02X}")
+        # 每16个字节换行
+        if (i + 1) % 16 == 0 and (i + 1) < len(parsed_bytes):
+            formatted_parts.append('\n')
+        elif (i + 1) < len(parsed_bytes):
+            formatted_parts.append(' ')
+    return "".join(formatted_parts)
+
+def get_ascii_string(data, start, end):
+    """提取ASCII字符串的通用函数"""
+    extracted_bytes = data[start:end]
+    byte_sequence = bytes(extracted_bytes)
+    return byte_sequence.decode('ascii', errors='replace')
 
 def parse_hex_string(data):
     # Parses a hexadecimal string into a list of integers.
+    # First, try to extract data from the simple A0h/A2h format
+    extracted_data = extract_from_simple_format(data)
+    if extracted_data:
+        return extracted_data  # Return the dictionary for special handling
+    
+    # Then try to extract data from the specific format you mentioned
+    extracted_data = extract_from_specific_format(data)
+    if extracted_data:
+        # Check if it's a dictionary with both a0h and a2h data
+        if isinstance(extracted_data, dict):
+            return extracted_data  # Return the dictionary for special handling
+        else:
+            data = extracted_data  # Single string data
+    else:
+        # Try to extract data from i2cdump format
+        extracted_data = extract_from_i2cdump_format(data)
+        if extracted_data:
+            # Check if it's a dictionary with both a0h and a2h data
+            if isinstance(extracted_data, dict):
+                return extracted_data  # Return the dictionary for special handling
+            else:
+                data = extracted_data  # Single string data
+    
     # Cleans the input, replacing newlines, commas, and "0x" prefixes.
     data = data.replace("\n", " ").replace(",", " ").replace("0x", " ")
     # Filters out valid two-character hex values.
@@ -92,6 +112,241 @@ def parse_hex_string(data):
     except ValueError:
         # Returns an empty list if conversion fails (e.g., invalid hex characters).
         return []
+
+def extract_from_i2cdump_format(data):
+    """
+    Extract hex data from i2cdump format:
+    root@radio2267:# i2cdump -f -y 0 0x50
+    No size specified (using byte-data access)
+     0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f    0123456789abcdef
+    00: 03 04 07 00 00 00 00 00 00 00 00 06 ff 00 0a 64    ???........?..?d
+    10: 00 00 00 00 45 52 49 43 53 53 4f 4e 20 20 20 20    ....ERICSSON    
+    ...
+    
+    Also supports multiple i2cdump outputs (0x50 and 0x51) in the same data
+    """
+    import re
+    
+    # Check if the data contains i2cdump format pattern
+    if "i2cdump" in data or (re.search(r'^\s*[0-9a-fA-F]{2}:', data, re.MULTILINE)):
+        # Check if this contains both 0x50 and 0x51 dumps
+        if "0x50" in data and "0x51" in data:
+            # Split the data into A0h (0x50) and A2h (0x51) sections
+            a0h_data, a2h_data = split_i2cdump_data(data)
+            return {'a0h': a0h_data, 'a2h': a2h_data}
+        else:
+            # Single dump - extract normally
+            hex_data = []
+            lines = data.split('\n')
+            
+            for line in lines:
+                # Look for lines that start with 2-digit hex address followed by colon and hex data
+                match = re.match(r'^\s*([0-9a-fA-F]{2}):\s+([0-9a-fA-F\s]+)', line.strip())
+                if match:
+                    hex_part = match.group(2)
+                    # Split by spaces and extract valid 2-character hex values
+                    hex_bytes = []
+                    for token in hex_part.split():
+                        if len(token) == 2 and re.match(r'^[0-9a-fA-F]{2}$', token):
+                            hex_bytes.append(token)
+                        else:
+                            # Stop when we hit non-hex data (ASCII representation)
+                            break
+                    hex_data.extend(hex_bytes)
+            
+            if hex_data:
+                return ' '.join(hex_data)
+    
+    return None
+
+def split_i2cdump_data(data):
+    """
+    Split combined i2cdump data containing both 0x50 and 0x51 dumps
+    Returns tuple (a0h_data, a2h_data) as hex strings
+    """
+    import re
+    
+    lines = data.split('\n')
+    a0h_hex = []
+    a2h_hex = []
+    current_section = None
+    
+    for line in lines:
+        # Detect which section we're in based on the i2cdump command
+        if "i2cdump" in line and "0x50" in line:
+            current_section = 'a0h'
+            continue
+        elif "i2cdump" in line and "0x51" in line:
+            current_section = 'a2h'
+            continue
+        
+        # Extract hex data from lines with address:data format
+        match = re.match(r'^\s*([0-9a-fA-F]{2}):\s+([0-9a-fA-F\s]+)', line.strip())
+        if match and current_section:
+            hex_part = match.group(2)
+            hex_bytes = []
+            for token in hex_part.split():
+                if len(token) == 2 and re.match(r'^[0-9a-fA-F]{2}$', token):
+                    hex_bytes.append(token)
+                else:
+                    break
+            
+            if current_section == 'a0h':
+                a0h_hex.extend(hex_bytes)
+            elif current_section == 'a2h':
+                a2h_hex.extend(hex_bytes)
+    
+    a0h_data = ' '.join(a0h_hex) if a0h_hex else None
+    a2h_data = ' '.join(a2h_hex) if a2h_hex else None
+    
+    return a0h_data, a2h_data
+
+def extract_from_simple_format(data):
+    """
+    Extract hex data from simple A0h/A2h format:
+    A0h
+    03040720 00000012 00014006 67000A64  (8-char groups)
+    OR
+    03 04 07 20 00 00 00 12 00 01 40 06  (2-char bytes)
+    ...
+    A2h
+    5D00D000 5800D500 8DCC7404 88A4792C  (8-char groups)
+    OR
+    5d 00 d0 00 58 00 d5 00 8d cc 74 04  (2-char bytes)
+    ...
+    """
+    import re
+    
+    # Check if the data contains simple A0h/A2h markers
+    if re.search(r'^\s*A0h\s*$', data, re.MULTILINE) and re.search(r'^\s*A2h\s*$', data, re.MULTILINE):
+        lines = data.split('\n')
+        a0h_hex = []
+        a2h_hex = []
+        current_section = None
+        
+        for line in lines:
+            line = line.strip()
+            # Detect section markers
+            if re.match(r'^A0h\s*$', line):
+                current_section = 'a0h'
+                continue
+            elif re.match(r'^A2h\s*$', line):
+                current_section = 'a2h'
+                continue
+            
+            # Extract hex data from lines
+            if current_section and line:
+                # First try to find 8-character hex groups
+                hex_groups = re.findall(r'[0-9A-Fa-f]{8}', line)
+                if hex_groups:
+                    # Process 8-char groups
+                    for group in hex_groups:
+                        # Split each 8-char group into 4 bytes
+                        for i in range(0, 8, 2):
+                            hex_byte = group[i:i+2]
+                            if current_section == 'a0h':
+                                a0h_hex.append(hex_byte)
+                            elif current_section == 'a2h':
+                                a2h_hex.append(hex_byte)
+                else:
+                    # Try to find 2-character hex bytes
+                    hex_bytes = re.findall(r'[0-9A-Fa-f]{2}', line)
+                    for hex_byte in hex_bytes:
+                        if current_section == 'a0h':
+                            a0h_hex.append(hex_byte)
+                        elif current_section == 'a2h':
+                            a2h_hex.append(hex_byte)
+        
+        if a0h_hex or a2h_hex:
+            a0h_data = ' '.join(a0h_hex) if a0h_hex else None
+            a2h_data = ' '.join(a2h_hex) if a2h_hex else None
+            return {'a0h': a0h_data, 'a2h': a2h_data}
+    
+    return None
+
+def extract_from_specific_format(data):
+    """
+    Extract hex data from the specific format:
+    Address Data                                Data
+    Hex     Hex                                 Bin
+    ----    -------- -------- -------- -------- ------------------
+    0000    03040720 00000012 00014006 67000A64 "... ......@.g..d"
+    
+    Also supports automatic separation of A0h and A2h data based on page indicators
+    """
+    import re
+    
+    # Check if the data contains the specific format pattern
+    if "Address Data" in data and "Hex     Hex" in data:
+        # Check if this contains both A0h and A2h sections
+        if ("A0h" in data or "EEPROM" in data) and ("A2h" in data or "DDM" in data):
+            # Split the data into A0h and A2h sections
+            a0h_data, a2h_data = split_specific_format_data(data)
+            return {'a0h': a0h_data, 'a2h': a2h_data}
+        else:
+            # Single section - extract normally
+            hex_data = []
+            lines = data.split('\n')
+            
+            for line in lines:
+                # Look for lines that start with 4-digit hex address followed by hex data
+                match = re.match(r'^([0-9A-Fa-f]{4})\s+([0-9A-Fa-f\s]+)\s+["&].*["&]\s*$', line.strip())
+                if match:
+                    hex_part = match.group(2).strip()
+                    # Remove spaces and extract all hex bytes (groups of 8 hex chars)
+                    hex_groups = re.findall(r'[0-9A-Fa-f]{8}', hex_part.replace(' ', ''))
+                    for group in hex_groups:
+                        # Split each 8-char group into 4 bytes
+                        for i in range(0, 8, 2):
+                            hex_data.append(group[i:i+2])
+            
+            if hex_data:
+                return ' '.join(hex_data)
+    
+    return None
+
+def split_specific_format_data(data):
+    """
+    Split specific format data containing both A0h and A2h sections
+    Returns tuple (a0h_data, a2h_data) as hex strings
+    """
+    import re
+    
+    lines = data.split('\n')
+    a0h_hex = []
+    a2h_hex = []
+    current_section = None
+    
+    for line in lines:
+        # Detect which section we're in based on page indicators
+        if "A0h" in line or ("EEPROM" in line and "A0h" in line):
+            current_section = 'a0h'
+            continue
+        elif "A2h" in line or ("DDM" in line and "A2h" in line):
+            current_section = 'a2h'
+            continue
+        
+        # Extract hex data from lines with address:data format
+        match = re.match(r'^([0-9A-Fa-f]{4})\s+([0-9A-Fa-f\s]+)\s+["&].*["&]\s*$', line.strip())
+        if match and current_section:
+            hex_part = match.group(2).strip()
+            # Remove spaces and extract all hex bytes (groups of 8 hex chars)
+            hex_groups = re.findall(r'[0-9A-Fa-f]{8}', hex_part.replace(' ', ''))
+            hex_bytes = []
+            for group in hex_groups:
+                # Split each 8-char group into 4 bytes
+                for i in range(0, 8, 2):
+                    hex_bytes.append(group[i:i+2])
+            
+            if current_section == 'a0h':
+                a0h_hex.extend(hex_bytes)
+            elif current_section == 'a2h':
+                a2h_hex.extend(hex_bytes)
+    
+    a0h_data = ' '.join(a0h_hex) if a0h_hex else None
+    a2h_data = ' '.join(a2h_hex) if a2h_hex else None
+    
+    return a0h_data, a2h_data
 
 def get_ascii(data, start, end):
     # Extracts a string from a portion of byte data
@@ -195,86 +450,135 @@ def parse_registers():
     raw_a0h = input_text.get("1.0", tk.END)
     raw_a2h = input_a2h_text.get("1.0", tk.END)
     
-    # 1. 判断是否全是十六进制数字和字母
-    # 十六进制字符包括 '0-9', 'a-f', 'A-F'
-    # 使用正则表达式检查，允许有空格
-    if not re.fullmatch(r"[\da-fA-F\s]*", raw_a0h):
-        messagebox.showwarning("Data Format Error", "A0h Strings contain not HEX byte!")
+    # Check if the input contains i2cdump format with both 0x50 and 0x51
+    combined_data = raw_a0h + "\n" + raw_a2h
+    if "i2cdump" in combined_data and "0x50" in combined_data and "0x51" in combined_data:
+        # Handle combined i2cdump format
+        extracted_data = extract_from_i2cdump_format(combined_data)
+        if isinstance(extracted_data, dict):
+            # Auto-populate both input fields
+            if extracted_data['a0h']:
+                parsed_a0h_bytes = [int(x, 16) for x in extracted_data['a0h'].split()]
+                formatted_a0h = format_hex_bytes(parsed_a0h_bytes)
+                input_text.delete("1.0", tk.END)
+                input_text.insert("1.0", formatted_a0h)
+                raw_a0h = formatted_a0h
+            
+            if extracted_data['a2h']:
+                parsed_a2h_bytes = [int(x, 16) for x in extracted_data['a2h'].split()]
+                formatted_a2h = format_hex_bytes(parsed_a2h_bytes)
+                input_a2h_text.delete("1.0", tk.END)
+                input_a2h_text.insert("1.0", formatted_a2h)
+                raw_a2h = formatted_a2h
+    
+    # Check if A0h input contains simple A0h/A2h format
+    elif re.search(r'^\s*A0h\s*$', raw_a0h, re.MULTILINE) and re.search(r'^\s*A2h\s*$', raw_a0h, re.MULTILINE):
+        # Handle simple A0h/A2h format
+        extracted_data = extract_from_simple_format(raw_a0h)
+        if isinstance(extracted_data, dict):
+            # Auto-populate both input fields
+            if extracted_data['a0h']:
+                parsed_a0h_bytes = [int(x, 16) for x in extracted_data['a0h'].split()]
+                formatted_a0h = format_hex_bytes(parsed_a0h_bytes)
+                input_text.delete("1.0", tk.END)
+                input_text.insert("1.0", formatted_a0h)
+                raw_a0h = formatted_a0h
+            
+            if extracted_data['a2h']:
+                parsed_a2h_bytes = [int(x, 16) for x in extracted_data['a2h'].split()]
+                formatted_a2h = format_hex_bytes(parsed_a2h_bytes)
+                input_a2h_text.delete("1.0", tk.END)
+                input_a2h_text.insert("1.0", formatted_a2h)
+                raw_a2h = formatted_a2h
+    
+    # Check if A0h input contains special format with both A0h and A2h data
+    elif ("Address Data" in raw_a0h and "A0h" in raw_a0h and "A2h" in raw_a0h) or ("EEPROM" in raw_a0h and "DDM" in raw_a0h):
+        # Handle combined special format
+        extracted_data = extract_from_specific_format(raw_a0h)
+        if isinstance(extracted_data, dict):
+            # Auto-populate both input fields
+            if extracted_data['a0h']:
+                parsed_a0h_bytes = [int(x, 16) for x in extracted_data['a0h'].split()]
+                formatted_a0h = format_hex_bytes(parsed_a0h_bytes)
+                input_text.delete("1.0", tk.END)
+                input_text.insert("1.0", formatted_a0h)
+                raw_a0h = formatted_a0h
+            
+            if extracted_data['a2h']:
+                parsed_a2h_bytes = [int(x, 16) for x in extracted_data['a2h'].split()]
+                formatted_a2h = format_hex_bytes(parsed_a2h_bytes)
+                input_a2h_text.delete("1.0", tk.END)
+                input_a2h_text.insert("1.0", formatted_a2h)
+                raw_a2h = formatted_a2h
+    
+    # 1. 判断是否包含有效的十六进制数据
+    # 支持十六进制字符 '0-9', 'a-f', 'A-F', 空格, 换行符, 逗号, 以及 '0x' 前缀
+    # 同时支持特定格式的数据（包含Address Data等标识符）和i2cdump格式
+    hex_pattern = r"[\da-fA-Fx\s,\n\r\"\-:]+"
+    if not re.fullmatch(hex_pattern, raw_a0h) and not ("Address Data" in raw_a0h) and not ("i2cdump" in raw_a0h or re.search(r'^\s*[0-9a-fA-F]{2}:', raw_a0h, re.MULTILINE)):
+        messagebox.showwarning("Data Format Error", "A0h Strings contain invalid characters!")
         return
-    if not re.fullmatch(r"[\da-fA-F\s]*", raw_a2h):
-        messagebox.showwarning("Data Format Error", "A2h Strings contain not HEX byte!")
+    if not re.fullmatch(hex_pattern, raw_a2h) and not ("Address Data" in raw_a2h) and not ("i2cdump" in raw_a2h or re.search(r'^\s*[0-9a-fA-F]{2}:', raw_a2h, re.MULTILINE)):
+        messagebox.showwarning("Data Format Error", "A2h Strings contain invalid characters!")
         return
 
-    # 移除所有空格，以便后续每两位插入空格
-    cleaned_string = raw_a0h.replace(" ", "")
-    cleaned_string_a2h = raw_a2h.replace(" ", "")
-    # 移除所有换行符号
-    cleaned_string = cleaned_string.replace("\n", "")
-    cleaned_string_a2h = cleaned_string_a2h.replace("\n", "")
-
-    ## 确保字符串长度是偶数，否则可能导致格式错误或不完整的十六进制对
-    #if len(cleaned_string) % 2 != 0:
-    #    messagebox.showwarning("Data Length Error", "A0h HEX string lenth must be even number!")
-    #    return
-    #if len(cleaned_string_a2h) % 2 != 0:
-    #    messagebox.showwarning("Data Length Error", "A2h HEX string lenth must be even number!")
-    #    return
-
-    # 2. 将格式变成 xx aa bb cc...
-    # 使用正则表达式在每两个字符后插入一个空格
-    #formatted_string = " ".join([cleaned_string[i:i+2] for i in range(0, len(cleaned_string), 2)])
-    #formatted_string_a2h = " ".join([cleaned_string_a2h[i:i+2] for i in range(0, len(cleaned_string_a2h), 2)])
-
-    formatted_parts = []
-    for i in range(0, len(cleaned_string), 2):
-        byte_pair = cleaned_string[i:i+2]
-        formatted_parts.append(byte_pair.upper()) # 将字节对转换为大写并添加
-
-        # 计算当前是第几个字节（从1开始计数）
-        byte_number = (i // 2) + 1
-
-        # 如果不是最后一个字节，并且是第16个字节的倍数，则添加换行符
-        if byte_number % 16 == 0 and byte_number < (len(cleaned_string) // 2):
-            formatted_parts.append('\n')
-        # 如果不是最后一个字节，且不是第16个字节的倍数，则添加空格
-        elif byte_number < (len(cleaned_string) // 2):
-            formatted_parts.append(' ')
-
-    formatted_parts_a2h = []
-    for i in range(0, len(cleaned_string_a2h), 2):
-        byte_pair = cleaned_string_a2h[i:i+2]
-        formatted_parts_a2h.append(byte_pair.upper()) # 将字节对转换为大写并添加
-
-        # 计算当前是第几个字节（从1开始计数）
-        byte_number = (i // 2) + 1
-
-        # 如果不是最后一个字节，并且是第16个字节的倍数，则添加换行符
-        if byte_number % 16 == 0 and byte_number < (len(cleaned_string_a2h) // 2):
-            formatted_parts_a2h.append('\n')
-        # 如果不是最后一个字节，且不是第16个字节的倍数，则添加空格
-        elif byte_number < (len(cleaned_string_a2h) // 2):
-            formatted_parts_a2h.append(' ')
-
-    frmatted_string = "".join(formatted_parts) # 转换为大写，并连接成最终字符串
-    frmatted_string_a2h = "".join(formatted_parts_a2h) # 转换为大写，并连接成最终字符串
-
-    raw_a0h = frmatted_string
-    raw_a2h = frmatted_string_a2h
-
-    # 3. 将input_text控件中的字符串替换为修改后的字符串
-    input_text.delete("1.0", tk.END)  # 清空当前内容
-    input_text.insert("1.0", frmatted_string) # 插入新内容，并转换为大写方便统一
-
-    input_a2h_text.delete("1.0", tk.END)  # 清空当前内容
-    input_a2h_text.insert("1.0", frmatted_string_a2h) # 插入新内容，并转换为大写方便统一
+    # 解析可用的十六进制字符串（现在支持0x格式、特定格式和i2cdump格式）
+    parsed_a0h_bytes = parse_hex_string(raw_a0h)
+    parsed_a2h_bytes = parse_hex_string(raw_a2h)
+    
+    # 通用自动分离：如果A0h输入超过256字节，自动分离（无论A2h是否有内容）
+    if isinstance(parsed_a0h_bytes, list) and len(parsed_a0h_bytes) > 256:
+        # 分离前256字节给A0h，剩余给A2h
+        a0h_part = parsed_a0h_bytes[:256]
+        a2h_part = parsed_a0h_bytes[256:]
+        
+        # 更新A0h输入框
+        formatted_a0h = format_hex_bytes(a0h_part)
+        input_text.delete("1.0", tk.END)
+        input_text.insert("1.0", formatted_a0h)
+        parsed_a0h_bytes = a0h_part
+        
+        # 更新A2h输入框（替换原有内容）
+        if a2h_part:
+            formatted_a2h = format_hex_bytes(a2h_part)
+            input_a2h_text.delete("1.0", tk.END)
+            input_a2h_text.insert("1.0", formatted_a2h)
+            parsed_a2h_bytes = a2h_part
+    
+    # 如果成功解析出数据，则格式化显示
+    if parsed_a0h_bytes:
+        # 将解析出的字节重新格式化为标准显示格式
+        formatted_parts = []
+        for i, byte_val in enumerate(parsed_a0h_bytes):
+            formatted_parts.append(f"{byte_val:02X}")
+            # 每16个字节换行
+            if (i + 1) % 16 == 0 and (i + 1) < len(parsed_a0h_bytes):
+                formatted_parts.append('\n')
+            elif (i + 1) < len(parsed_a0h_bytes):
+                formatted_parts.append(' ')
+        
+        formatted_string = "".join(formatted_parts)
+        input_text.delete("1.0", tk.END)
+        input_text.insert("1.0", formatted_string)
+    
+    if parsed_a2h_bytes:
+        # 将解析出的字节重新格式化为标准显示格式
+        formatted_parts_a2h = []
+        for i, byte_val in enumerate(parsed_a2h_bytes):
+            formatted_parts_a2h.append(f"{byte_val:02X}")
+            # 每16个字节换行
+            if (i + 1) % 16 == 0 and (i + 1) < len(parsed_a2h_bytes):
+                formatted_parts_a2h.append('\n')
+            elif (i + 1) < len(parsed_a2h_bytes):
+                formatted_parts_a2h.append(' ')
+        
+        formatted_string_a2h = "".join(formatted_parts_a2h)
+        input_a2h_text.delete("1.0", tk.END)
+        input_a2h_text.insert("1.0", formatted_string_a2h)
 
     global bytes_data # Declare bytes_data as global for modification
     global addr_map # Declare addr_map as global for modification
     addr_map.clear() # Clear address map for new parsing
-
-    # Parse available hex strings
-    parsed_a0h_bytes = parse_hex_string(raw_a0h)
-    parsed_a2h_bytes = parse_hex_string(raw_a2h)
 
     a0h_parsed_len = len(parsed_a0h_bytes)
     a2h_parsed_len = len(parsed_a2h_bytes)
@@ -1280,8 +1584,9 @@ def show_about_window():
     except Exception as e:
         tk.Label(top, text=f"图片显示失败: {e}").pack()
 
-    tk.Label(top, text="Open source is not easy.").pack()
-    tk.Label(top, text="Donations are welcome via Alipay.").pack()
+    tk.Label(top, text="If this tool saved your time,").pack()
+    tk.Label(top, text="feel free to buy me a coffee.").pack()
+    tk.Label(top, text="Your support means a lot to me!").pack()
 
 
 # --- Main Application Setup ---
@@ -1305,7 +1610,8 @@ menubar.add_cascade(label="About", menu=about_menu)
 
 about_menu.add_command(label=today_date, state="disabled")
 about_menu.add_command(label="Developed by Xian.Wu", state="disabled")
-about_menu.add_command(label="Donation Here.", command=show_about_window)
+about_menu.add_command(label="dakongwuxian@gmail.com", state="disabled")
+about_menu.add_command(label="Buy me a coffee ☕", command=show_about_window)
 
 # --- Load explanations from file at startup ---
 load_explanations_from_file()
@@ -1330,8 +1636,6 @@ middle_frame = tk.Frame(main_frame)
 middle_frame.grid(row=0, column=1, padx=(0, 10), sticky='nsew')
 middle_frame.grid_rowconfigure(1, weight=1) # Row for output_text
 middle_frame.grid_columnconfigure(0, weight=1) # Single column for elements in middle_frame
-
-
 
 # --- A0h Input Section ---
 input_label_a0h = tk.Label(left_frame, text="Input A0h 128 or 256bytes data here (byte 128-255 reserved for SFF-8079)")
