@@ -6,8 +6,7 @@ a = Analysis(
     pathex=[],
     binaries=[],
     datas=[
-        ('A0h_bits_explanation.txt', '.'),
-        ('A2h_bits_explanation.txt', '.')
+        ('my_image.jpg', '.'),
     ],
     hiddenimports=[],
     hookspath=[],
