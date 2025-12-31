@@ -1,7 +1,7 @@
 ﻿import tkinter as tk
 from tkinter import messagebox, scrolledtext
 import re
-import os # Import os module for path manipulation
+import os
 import math
 import struct
 from PIL import Image, ImageTk
@@ -11,14 +11,10 @@ import sys
 # Global variables
 _current_bit_addr = -1
 _current_bit_value = -1 
-bytes_data = [] # Global list to store parsed byte data
-addr_map = {} # Global dictionary for address mapping
-explanations = {} # For A0h explanations (0-255)# Global dictionaries for A0h and A2h explanations
-a2h_explanations = {} # For A2h explanations (0-255 relative to A2h page, global 256-511)
-
-output_text_target_line = 0
-
-# List to hold the 8 individual bit entry widgets
+bytes_data = []
+addr_map = {}
+explanations = {}
+a2h_explanations = {}
 bit_entries = []
 
 def resource_path(relative_path):
@@ -77,12 +73,6 @@ def format_hex_bytes(parsed_bytes):
             formatted_parts.append(' ')
     return "".join(formatted_parts)
 
-def get_ascii_string(data, start, end):
-    """提取ASCII字符串的通用函数"""
-    extracted_bytes = data[start:end]
-    byte_sequence = bytes(extracted_bytes)
-    return byte_sequence.decode('ascii', errors='replace')
-
 def parse_hex_string(data):
     # Parses a hexadecimal string into a list of integers.
     # First, try to extract data from the simple A0h/A2h format
@@ -131,8 +121,6 @@ def extract_from_i2cdump_format(data):
     
     Also supports multiple i2cdump outputs (0x50 and 0x51) in the same data
     """
-    import re
-    
     # Check if the data contains i2cdump format pattern
     if "i2cdump" in data or (re.search(r'^\s*[0-9a-fA-F]{2}:', data, re.MULTILINE)):
         # Check if this contains both 0x50 and 0x51 dumps
@@ -170,8 +158,6 @@ def split_i2cdump_data(data):
     Split combined i2cdump data containing both 0x50 and 0x51 dumps
     Returns tuple (a0h_data, a2h_data) as hex strings
     """
-    import re
-    
     lines = data.split('\n')
     a0h_hex = []
     a2h_hex = []
@@ -221,8 +207,6 @@ def extract_from_simple_format(data):
     5d 00 d0 00 58 00 d5 00 8d cc 74 04  (2-char bytes)
     ...
     """
-    import re
-    
     # Check if the data contains simple A0h/A2h markers
     if re.search(r'^\s*A0h\s*$', data, re.MULTILINE) and re.search(r'^\s*A2h\s*$', data, re.MULTILINE):
         lines = data.split('\n')
@@ -1130,15 +1114,15 @@ def on_bit_entry_click(event):
     update_bit_output_from_entries()
 
 
-def on_bit_output_double_click(event):
+def on_bit_output_click(event):
     """
-    Handles double-click event on bit_output_text.
-    If an 8-bit binary string is selected, it populates the individual bit entry boxes.
+    Handles click event on bit_output_text.
+    If an 8-bit binary string is at cursor position, it highlights and populates the individual bit entry boxes.
     """
     try:
         # 清除旧的高亮
         bit_output_text.tag_remove("highlight", "1.0", tk.END)
-        # Get the selected text using selection_get()
+        # Get the clicked position
         index = bit_output_text.index(f"@{event.x},{event.y}")
         # 使用 word start / word end 获取完整单词
         word_start = bit_output_text.index(f"{index} wordstart")
@@ -1156,7 +1140,7 @@ def on_bit_output_double_click(event):
             line_index = index.split('.')[0]
             line_text = bit_output_text.get(f"{line_index}.0", f"{line_index}.end")
 
-            # 尝试从行首提取地址（支持 "00:" 或 "0x00:" 形式）
+            # 尝试从行首提取地址
             m = re.search(r"(?i)(A2h)?\s*byte\s+(\d+):?", line_text)
             if m:
                 a2h_flag = m.group(1)
@@ -1170,19 +1154,13 @@ def on_bit_output_double_click(event):
                 print(f"Detected bit address: {_current_bit_addr}")
             else:
                 print("Warning: Could not extract address from line.")
-            # After populating individual bits, update the main bit_output_text
-            # This ensures consistency if the user selected a binary string that was already there
-            # or if they selected one from a different line.
-            #update_bit_output_from_entries()
         else:
-            # If not an 8-bit binary, clear individual bit entries and show info
+            # If not an 8-bit binary, clear individual bit entries
             for i in range(8):
                 bit_entries[i].delete(0, tk.END)
                 bit_entries[i].insert(0, '0') # Reset to default
-            #messagebox.showinfo("Selection Info", "Selected text is not a valid 8-bit binary number.")
     except Exception as e:
-        print(f"Error in on_bit_output_double_click: {e}")
-        #messagebox.showerror("Error", f"An error occurred: {e}")
+        print(f"Error in on_bit_output_click: {e}")
 
 
 def on_cursor_click(event):
@@ -1468,7 +1446,7 @@ def apply_changes():
             hl_start = bit_output_text.index("highlight.first")
             hl_end = bit_output_text.index("highlight.last")
         except tk.TclError:
-            messagebox.showwarning("No Selection", "Please double-click an 8-bit binary field to highlight it first.")
+            messagebox.showwarning("No Selection", "Please click an 8-bit binary field to highlight it first.")
             return
         
         selected_binary = bit_output_text.get(hl_start, hl_end).strip()
@@ -1807,7 +1785,7 @@ apply_change_button.grid(row=1, column=1, columnspan=3, sticky='ne',pady=5) # Bu
 
 bit_output_text = scrolledtext.ScrolledText(right_frame, height=30, width=50, state='normal', font=('Courier New', 10))
 bit_output_text.grid(row=2, column=0, columnspan=2, sticky='nsew') # columnspan=2 to span label and button columns
-bit_output_text.bind("<Double-Button-1>", on_bit_output_double_click) # Bind double-click event
+bit_output_text.bind("<Button-1>", on_bit_output_click) # Bind single-click event
 
 
 # Initialize highlight tag style
