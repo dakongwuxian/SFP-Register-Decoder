@@ -9,18 +9,27 @@ SFP-Reg-Decoder 用户手册 - last edit on 2025.12.29 by xian wu
 本软件为开源软件，如果想要商用请取得原作者许可，请联系dakongwuxian@gmail.com或xian.wu@ericsson.com。
 
 简要说明：
+
 1、将SFP A0h 和 A2h的寄存器内容粘贴到左侧的对应的窗口中（可以全部粘贴到A0h，格式可以是单独的AA FF……，也可以是8个hex连续的 AAAAAAAA FFFFFFFF……，对Ericsson radio的2中register dump的格式也可以直接解析），点击parse register按键，即可看到解析结果；
+
 2、粘贴进去的内容需要是只包含十六进制的数字和字母的字符，不要0xAA的0x，只要AA，可以包含空格和换行符，A0h必须是128byte或者256byte，A2h必须是256byte；
+
 3、解析后，可以用鼠标点击左侧窗口中的寄存器值，或者点击中间输出窗口中的任意内容，会在右侧出现对应byte的详细解释，同时会将左侧、中间对应的位置都标黄出来；
+
 4、右侧窗口的上方有一个8bit的显示窗口，当你双击右侧的大窗口中的某个8bit的二进制数，该二进制数会被高亮，同时上方的8个bit窗口会对应为该二进制数；
+
 5、当右侧有二进制数被高亮时，单机8bit窗口的任意一个bit，该bit即会翻转，同时右侧大窗口中的内容会对应修改；
+
 6、如果在右侧大窗口中有高亮内容时，点击apply change按键，则会更新左侧、中间、右侧的寄存器内容。
 
 注意：
+
 1、该exe必须要跟 A0h_bits_explanation.txt 和 A2h_bits_explanation.txt 两个文件放在同一个文件夹，否则右侧窗口会没有内容可以显示。
+
 2、这2个txt文件可以手动修改，修改后保存，重启exe即可生效，如果发现有相应的bit解释是错误的，可以直接自行修改。
 
 可能存在潜在的错误，仅供参考，如果发现错误，请及时告知 xian.wu@ericsson.com 或 dakongwuxian@mail.com 。
+
 欢迎提出意见及建议~
 
 exe 文件的下载链接如下：
